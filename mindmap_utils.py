@@ -11,7 +11,8 @@ import re
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import wordnet
 import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
+import os
+import sys
 
 # Download NLTK resources
 @st.cache_resource
@@ -22,16 +23,35 @@ def download_nltk_resources():
     nltk.download('averaged_perceptron_tagger')
 download_nltk_resources()
 
-# Load spaCy model - Fixed for Streamlit deployment
+# Load spaCy model - Alternative approach for Streamlit
 @st.cache_resource
 def load_spacy_model():
     try:
+        # First try loading directly
         return spacy.load('en_core_web_sm')
     except:
-        # Streamlit-specific way to handle model loading
-        import os
-        os.system("python -m pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.6.0/en_core_web_sm-3.6.0-py3-none-any.whl")
-        return spacy.load('en_core_web_sm')
+        # If that fails, try downloading
+        st.info("First-time setup: Downloading language model...")
+        # Streamlit-recommended approach
+        try:
+            # Method 1: Python executable approach
+            os.system(f"{sys.executable} -m spacy download en_core_web_sm")
+            return spacy.load('en_core_web_sm')
+        except:
+            try:
+                # Method 2: PIP install directly
+                os.system(f"{sys.executable} -m pip install en-core-web-sm")
+                return spacy.load('en_core_web_sm')
+            except:
+                # Method 3: Direct import approach
+                try:
+                    from spacy.cli import download
+                    download('en_core_web_sm')
+                    return spacy.load('en_core_web_sm')
+                except Exception as e:
+                    st.error(f"Failed to load spaCy model: {str(e)}")
+                    # Fallback to minimal processing
+                    return spacy.blank("en")
 
 # Function to get semantic meaning and importance of words
 def get_key_entities_and_concepts(text, nlp, max_entities=15):
@@ -121,6 +141,32 @@ def extract_semantic_keywords(text, nlp, num_keywords=10):
     # Limit to the requested number of keywords
     return semantic_keywords[:num_keywords]
 
+# Simplified fallback approach if spaCy model not available
+def extract_fallback_keywords(text, num_keywords=10):
+    """Extract keywords without using spaCy if model fails to load."""
+    # Clean text
+    clean_text = re.sub(r'[^\w\s]', '', text)
+    
+    # Use TF-IDF for keywords
+    stop_words = set(stopwords.words('english'))
+    
+    # Tokenize and filter
+    words = nltk.word_tokenize(clean_text.lower())
+    filtered_words = [word for word in words if word.isalnum() and word not in stop_words and len(word) > 2]
+    filtered_text = ' '.join(filtered_words)
+    
+    # Use TF-IDF
+    vectorizer = TfidfVectorizer(max_features=num_keywords, stop_words='english')
+    try:
+        tfidf_matrix = vectorizer.fit_transform([filtered_text])
+        keywords = vectorizer.get_feature_names_out()
+        return list(keywords)
+    except:
+        # If TF-IDF fails, return most common words
+        from collections import Counter
+        word_counts = Counter(filtered_words)
+        return [word for word, count in word_counts.most_common(num_keywords)]
+
 # Function to determine keyword relationships and build mindmap structure
 def build_semantic_mindmap_structure(keywords, text, nlp, max_main_topics=3):
     """Create a hierarchical structure for the mindmap based on semantic relationships."""
@@ -128,60 +174,91 @@ def build_semantic_mindmap_structure(keywords, text, nlp, max_main_topics=3):
     if not keywords:
         return {"Mindmap": []}, "Mindmap"
     
-    # Process the text with spaCy to get embeddings
-    doc = nlp(text)
+    # Check if we have a full spaCy model with vectors
+    has_vectors = hasattr(nlp, 'has_pipe') and nlp.has_pipe('tok2vec')
     
-    # Find the most central concept (the one with highest average similarity to others)
-    keyword_docs = [nlp(keyword) for keyword in keywords]
-    
-    # Calculate similarity matrix
-    similarity_matrix = np.zeros((len(keywords), len(keywords)))
-    for i, doc1 in enumerate(keyword_docs):
-        for j, doc2 in enumerate(keyword_docs):
-            if i != j:
-                similarity_matrix[i, j] = doc1.similarity(doc2)
-    
-    # Get the keyword with highest average similarity to others
-    avg_similarities = np.mean(similarity_matrix, axis=1)
-    root_index = np.argmax(avg_similarities)
-    root = keywords[root_index]
-    
-    # Remove root from keywords
-    remaining_keywords = keywords.copy()
-    remaining_keywords.pop(root_index)
-    remaining_docs = keyword_docs.copy()
-    remaining_docs.pop(root_index)
-    
-    # Calculate similarities to root
-    root_similarities = []
-    root_doc = nlp(root)
-    for i, kw_doc in enumerate(remaining_docs):
-        root_similarities.append((remaining_keywords[i], kw_doc.similarity(root_doc)))
-    
-    # Sort by similarity to root
-    root_similarities.sort(key=lambda x: x[1], reverse=True)
-    
-    # Select main topics (most similar to root but limited in number)
-    main_topics = [kw for kw, _ in root_similarities[:max_main_topics]]
-    sub_topics = [kw for kw, _ in root_similarities[max_main_topics:]]
-    
-    # Build hierarchy
-    hierarchy = defaultdict(list)
-    
-    # Add main topics as children of root
-    for topic in main_topics:
-        hierarchy[root].append(topic)
-    
-    # Distribute sub-topics among main topics based on similarity
-    if main_topics and sub_topics:
-        main_topic_docs = [nlp(topic) for topic in main_topics]
+    if has_vectors:
+        # Process the text with spaCy to get embeddings
+        doc = nlp(text)
         
-        for sub in sub_topics:
-            sub_doc = nlp(sub)
-            similarities = [sub_doc.similarity(topic_doc) for topic_doc in main_topic_docs]
-            best_match_idx = np.argmax(similarities)
-            best_match = main_topics[best_match_idx]
-            hierarchy[best_match].append(sub)
+        # Find the most central concept (the one with highest average similarity to others)
+        keyword_docs = [nlp(keyword) for keyword in keywords]
+        
+        # Calculate similarity matrix
+        similarity_matrix = np.zeros((len(keywords), len(keywords)))
+        for i, doc1 in enumerate(keyword_docs):
+            for j, doc2 in enumerate(keyword_docs):
+                if i != j:
+                    similarity_matrix[i, j] = doc1.similarity(doc2)
+        
+        # Get the keyword with highest average similarity to others
+        avg_similarities = np.mean(similarity_matrix, axis=1)
+        root_index = np.argmax(avg_similarities)
+        root = keywords[root_index]
+        
+        # Remove root from keywords
+        remaining_keywords = keywords.copy()
+        remaining_keywords.pop(root_index)
+        remaining_docs = keyword_docs.copy()
+        remaining_docs.pop(root_index)
+        
+        # Calculate similarities to root
+        root_similarities = []
+        root_doc = nlp(root)
+        for i, kw_doc in enumerate(remaining_docs):
+            root_similarities.append((remaining_keywords[i], kw_doc.similarity(root_doc)))
+        
+        # Sort by similarity to root
+        root_similarities.sort(key=lambda x: x[1], reverse=True)
+        
+        # Select main topics (most similar to root but limited in number)
+        main_topics = [kw for kw, _ in root_similarities[:max_main_topics]]
+        sub_topics = [kw for kw, _ in root_similarities[max_main_topics:]]
+        
+        # Build hierarchy
+        hierarchy = defaultdict(list)
+        
+        # Add main topics as children of root
+        for topic in main_topics:
+            hierarchy[root].append(topic)
+        
+        # Distribute sub-topics among main topics based on similarity
+        if main_topics and sub_topics:
+            main_topic_docs = [nlp(topic) for topic in main_topics]
+            
+            for sub in sub_topics:
+                sub_doc = nlp(sub)
+                similarities = [sub_doc.similarity(topic_doc) for topic_doc in main_topic_docs]
+                best_match_idx = np.argmax(similarities)
+                best_match = main_topics[best_match_idx]
+                hierarchy[best_match].append(sub)
+    else:
+        # Fallback to a simpler approach if no vectors
+        # Just choose the first keyword as root and distribute others
+        if keywords:
+            root = keywords[0]
+            remaining = keywords[1:]
+            
+            # Simple distribution - every n keywords go to a main topic
+            hierarchy = defaultdict(list)
+            
+            # If we have at least max_main_topics remaining keywords
+            if len(remaining) >= max_main_topics:
+                main_topics = remaining[:max_main_topics]
+                sub_topics = remaining[max_main_topics:]
+                
+                # Add main topics as children of root
+                for topic in main_topics:
+                    hierarchy[root].append(topic)
+                
+                # Distribute subtopics
+                for i, sub in enumerate(sub_topics):
+                    main_idx = i % len(main_topics)
+                    hierarchy[main_topics[main_idx]].append(sub)
+            else:
+                # All remaining keywords are main topics
+                for topic in remaining:
+                    hierarchy[root].append(topic)
     
     return hierarchy, root
 
@@ -191,8 +268,15 @@ def generate_semantic_mindmap(text, theme="dark"):
     # Get spaCy model
     nlp = load_spacy_model()
     
-    # Extract keywords with semantic meaning
-    keywords = extract_semantic_keywords(text, nlp, num_keywords=12)
+    # Check if we have a full spaCy model with named entities and vectors
+    has_ner = hasattr(nlp, 'has_pipe') and nlp.has_pipe('ner')
+    
+    # Extract keywords - use appropriate method based on model capabilities
+    if has_ner:
+        keywords = extract_semantic_keywords(text, nlp, num_keywords=12)
+    else:
+        # Use fallback if we don't have a full model
+        keywords = extract_fallback_keywords(text, num_keywords=12)
     
     # Build semantic mindmap structure
     hierarchy, root = build_semantic_mindmap_structure(keywords, text, nlp)
