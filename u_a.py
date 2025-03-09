@@ -24,13 +24,13 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from urllib.parse import parse_qs, urlparse
 import json
 from mindmap_utils import add_semantic_mindmap_section
-
+st.set_page_config(page_title="Enhanced Content Summarizer", page_icon="🌟")
 # Set up logging for debugging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Streamlit app configuration - MUST BE FIRST
-st.set_page_config(page_title="Enhanced Content Summarizer", page_icon="🌟")
+
 
 # Database setup
 def init_db():
