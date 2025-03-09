@@ -13,9 +13,11 @@ requests==2.32.3
 beautifulsoup4==4.12.3
 fpdf==1.7.2
 gtts==2.2.3
-nltk==3.7
+nltk==3.8.1 
 graphviz==0.20.1
 scikit-learn>=1.0.2
 setuptools>=65.5.0
 wheel
 youtube-transcript-api==0.4.4
+spacy==3.7.2 
+numpy==1.26.4  
