@@ -23,7 +23,7 @@ import base64
 from youtube_transcript_api import YouTubeTranscriptApi
 from urllib.parse import parse_qs, urlparse
 import json
-from mindmap_utils import add_mindmap_section
+from mindmap_utils import add_semantic_mindmap_section
 
 # Set up logging for debugging
 logging.basicConfig(level=logging.INFO)
@@ -1011,11 +1011,11 @@ else:
         url=st.session_state.url,
         )
         current_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        add_mindmap_section(
-            summary_text=st.session_state["summary"],
-            dark_mode=st.session_state["dark_mode"],
-            timestamp=current_timestamp
-        )
+        add_semantic_mindmap_section(
+        summary_text=st.session_state["summary"],
+        dark_mode=st.session_state["dark_mode"],
+        timestamp=current_timestamp
+    )
     # Chat Interface
     st.markdown("<h3 class='chat-header'>Chat with AI</h3>", unsafe_allow_html=True)
     st.write(f"Ask any questions about the summary! (Responses will be in {st.session_state.selected_language})")
