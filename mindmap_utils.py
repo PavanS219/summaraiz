@@ -22,15 +22,15 @@ def download_nltk_resources():
     nltk.download('averaged_perceptron_tagger')
 download_nltk_resources()
 
-# Load spaCy model
+# Load spaCy model - Fixed for Streamlit deployment
 @st.cache_resource
 def load_spacy_model():
     try:
         return spacy.load('en_core_web_sm')
     except:
-        # If model isn't available, download it first
-        import subprocess
-        subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+        # Streamlit-specific way to handle model loading
+        import os
+        os.system("python -m pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.6.0/en_core_web_sm-3.6.0-py3-none-any.whl")
         return spacy.load('en_core_web_sm')
 
 # Function to get semantic meaning and importance of words
@@ -287,3 +287,26 @@ def add_semantic_mindmap_section(summary_text, dark_mode=True, timestamp=None):
                 st.info("The mindmap generation requires text with sufficient content to identify key concepts.")
     else:
         st.info("Generate a summary first to see the mindmap visualization.")
+
+# Main app function
+def main():
+    st.title("Semantic Mindmap Generator")
+    st.write("Enter text to generate a mindmap of key concepts and their relationships.")
+    
+    # Text input
+    input_text = st.text_area("Enter your text (minimum 100 characters recommended):", 
+                            height=200,
+                            placeholder="Paste your text here...")
+    
+    # Theme selection
+    dark_mode = st.checkbox("Dark Theme", value=True)
+    
+    if st.button("Generate Mindmap"):
+        if input_text and len(input_text) >= 50:  # Minimum length check
+            with st.spinner("Processing text..."):
+                add_semantic_mindmap_section(input_text, dark_mode)
+        else:
+            st.warning("Please enter more text for better mindmap generation (at least 50 characters).")
+
+if __name__ == "__main__":
+    main()
