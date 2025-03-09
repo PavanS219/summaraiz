@@ -21,9 +21,4 @@ wheel
 youtube-transcript-api==0.4.4
 spacy==3.7.2 
 numpy==1.26.4  
-nltk
-graphviz
-spacy
-scikit-learn
-streamlit
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.6.0/en_core_web_sm-3.6.0-py3-none-any.whl
